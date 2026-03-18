@@ -25,11 +25,6 @@ type DFA struct {
 	// while non-match states need no masking (high bit is 0 = clean ID).
 	trans []uint32
 
-	// matchBitmap is a compact bitmap: one bit per state.
-	// matchBitmap[stateIndex/64] & (1 << (stateIndex%64)) != 0 means match.
-	// Typically < 1KB, fits in L1 cache.
-	matchBitmap []uint64
-
 	// matchIndex maps state index to offset in matchData.
 	// matchIndex[stateIdx] = (offset << 16) | count
 	// If count == 0, state is not a match state.
@@ -144,15 +139,6 @@ func buildDFA(nfa *OptimizedNFA, patterns [][]byte, matchKind MatchKind) *DFA {
 		isMatch[si] = len(nfa.states[si].matches) > 0
 	}
 
-	// Build match bitmap: one bit per state.
-	bitmapLen := (numStates + 63) / 64
-	d.matchBitmap = make([]uint64, bitmapLen)
-	for si := range numStates {
-		if isMatch[si] {
-			d.matchBitmap[si/64] |= 1 << uint(si%64)
-		}
-	}
-
 	// Build transition table with embedded match flags.
 	tableSize := numStates * stride
 	d.trans = make([]uint32, tableSize)
@@ -234,6 +220,6 @@ func (d *DFA) getMatches(sid uint32) []PatternID {
 // memoryUsage returns the approximate heap memory used by this DFA in bytes.
 func (d *DFA) memoryUsage() int {
 	return len(d.trans)*4 +
-		len(d.matchBitmap)*8 + len(d.matchIndex)*4 +
+		len(d.matchIndex)*4 +
 		len(d.matchData)*4 + len(d.patternLens)*8
 }
