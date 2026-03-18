@@ -1,56 +1,61 @@
 package ahocorasick
 
 // Automaton is the compiled Aho-Corasick multi-pattern matcher.
-// Uses optimized dense array transitions for high performance.
+// Uses a fully compiled DFA with premultiplied state IDs for maximum throughput.
 type Automaton struct {
-	nfa       *OptimizedNFA
+	dfa       *DFA
 	patterns  [][]byte
 	matchKind MatchKind
 }
 
 // Find returns the first match in haystack starting at or after position start.
 // Returns nil if no match is found.
+// Uses the flagged transition table for inline match detection.
 func (a *Automaton) Find(haystack []byte, start int) *Match {
 	if start >= len(haystack) {
 		return nil
 	}
 
-	state := a.nfa.startState
+	d := a.dfa
+	trans := d.transFlagged
+	classes := &d.byteClasses.classes
+	sid := d.startID
+	patternLens := d.patternLens
+
+	_ = trans[len(trans)-1]
+
 	var bestMatch *Match
 
 	for i := start; i < len(haystack); i++ {
-		b := haystack[i]
-		state = a.nfa.nextState(state, b)
+		raw := trans[int(sid&matchMask)+int(classes[haystack[i]])]
+		sid = raw
 
-		if !a.nfa.isMatch(state) {
+		if raw&matchFlag == 0 {
 			continue
 		}
 
-		matches := a.nfa.getMatches(state)
+		cleanSid := sid & matchMask
+		matches := d.getMatches(cleanSid)
 		if len(matches) == 0 {
 			continue
 		}
 
-		// For LeftmostFirst, take the first pattern that matches
 		patternID := matches[0]
-		pattern := a.patterns[patternID]
 		matchEnd := i + 1
-		matchStart := matchEnd - len(pattern)
+		matchStart := matchEnd - patternLens[patternID]
 
-		match := &Match{
+		m := &Match{
 			PatternID: int(patternID),
 			Start:     matchStart,
 			End:       matchEnd,
 		}
 
 		if a.matchKind == LeftmostFirst {
-			// Return immediately for leftmost-first
-			return match
+			return m
 		}
 
-		// For LeftmostLongest, track the longest match
-		if bestMatch == nil || match.Len() > bestMatch.Len() {
-			bestMatch = match
+		if bestMatch == nil || m.Len() > bestMatch.Len() {
+			bestMatch = m
 		}
 	}
 
@@ -58,54 +63,58 @@ func (a *Automaton) Find(haystack []byte, start int) *Match {
 }
 
 // FindAt returns the first match starting exactly at position start.
-// This is useful for anchored matching.
 // Returns nil if no match starts at the given position.
 func (a *Automaton) FindAt(haystack []byte, start int) *Match {
 	if start >= len(haystack) {
 		return nil
 	}
 
-	state := a.nfa.startState
+	d := a.dfa
+	trans := d.transFlagged
+	classes := &d.byteClasses.classes
+	sid := d.startID
+	startID := d.startID
+	patternLens := d.patternLens
+
+	_ = trans[len(trans)-1]
+
 	var bestMatch *Match
 
 	for i := start; i < len(haystack); i++ {
-		b := haystack[i]
-		prevState := state
-		state = a.nfa.nextState(state, b)
+		prevSid := sid & matchMask
+		raw := trans[int(prevSid)+int(classes[haystack[i]])]
+		sid = raw
 
-		// Check if we've moved past a potential match position
-		if prevState == a.nfa.startState && i > start {
-			// We're back at start state after position 'start'
-			// No match can start at 'start'
+		if prevSid == startID && i > start {
 			break
 		}
 
-		if !a.nfa.isMatch(state) {
+		if raw&matchFlag == 0 {
 			continue
 		}
 
-		for _, patternID := range a.nfa.getMatches(state) {
-			pattern := a.patterns[patternID]
+		cleanSid := sid & matchMask
+		for _, patternID := range d.getMatches(cleanSid) {
+			patLen := patternLens[patternID]
 			matchEnd := i + 1
-			matchStart := matchEnd - len(pattern)
+			matchStart := matchEnd - patLen
 
-			// Only accept if match starts at 'start'
 			if matchStart != start {
 				continue
 			}
 
-			match := &Match{
+			m := &Match{
 				PatternID: int(patternID),
 				Start:     matchStart,
 				End:       matchEnd,
 			}
 
 			if a.matchKind == LeftmostFirst {
-				return match
+				return m
 			}
 
-			if bestMatch == nil || match.Len() > bestMatch.Len() {
-				bestMatch = match
+			if bestMatch == nil || m.Len() > bestMatch.Len() {
+				bestMatch = m
 			}
 		}
 	}
@@ -114,49 +123,32 @@ func (a *Automaton) FindAt(haystack []byte, start int) *Match {
 }
 
 // IsMatch returns true if any pattern matches anywhere in the haystack.
-// Optimized: inlined nextState for maximum performance.
+// This is the most optimized search path — zero allocations, minimal branching.
+//
+// Uses the flagged transition table. Key insight: when raw has no match flag
+// (the common case), raw IS the clean state ID — no masking needed.
+// Only on match (return true) would masking be needed, but we don't use sid after.
+//
+// Hot loop per byte: 1 class lookup, 1 table lookup, 1 AND check.
 func (a *Automaton) IsMatch(haystack []byte) bool {
-	nfa := a.nfa
-	state := nfa.startState
-	bc := nfa.byteClasses
-	states := nfa.states
-	startState := nfa.startState
+	trans := a.dfa.transFlagged
+	classes := &a.dfa.byteClasses.classes
+	sid := a.dfa.startID // always 0
+
+	// BCE hint
+	if len(trans) > 0 {
+		_ = trans[len(trans)-1]
+	}
 
 	for i := 0; i < len(haystack); i++ {
-		class := bc.Get(haystack[i]) //nolint:gosec // G602: bounded by loop condition
-
-		// Inlined nextState for performance
-		state = a.advanceState(states, state, startState, class)
-
-		if len(states[state].matches) > 0 {
+		raw := trans[int(sid)+int(classes[haystack[i]])]
+		if raw&matchFlag != 0 {
 			return true
 		}
+		sid = raw
 	}
 
 	return false
-}
-
-// advanceState computes next state given current state and byte class.
-// Inlined by compiler for hot path performance.
-func (a *Automaton) advanceState(states []optState, state, startState StateID, class int) StateID {
-	// Fast path for root state
-	if state == startState {
-		if next := states[state].trans[class]; next != 0 {
-			return next
-		}
-		return startState
-	}
-
-	// Follow failure links for non-root states
-	for {
-		if next := states[state].trans[class]; next != 0 {
-			return next
-		}
-		if state == startState {
-			return startState
-		}
-		state = states[state].fail
-	}
 }
 
 // FindAll returns all non-overlapping matches in the haystack.
@@ -166,18 +158,16 @@ func (a *Automaton) FindAll(haystack []byte, n int) []Match {
 	pos := 0
 
 	for pos < len(haystack) && (n < 0 || len(matches) < n) {
-		match := a.Find(haystack, pos)
-		if match == nil {
+		m := a.Find(haystack, pos)
+		if m == nil {
 			break
 		}
 
-		matches = append(matches, *match)
+		matches = append(matches, *m)
 
-		// Move past this match (non-overlapping)
-		pos = match.End
-		if pos <= match.Start {
-			// Safety: ensure progress
-			pos = match.Start + 1
+		pos = m.End
+		if pos <= m.Start {
+			pos = m.Start + 1
 		}
 	}
 
@@ -185,26 +175,37 @@ func (a *Automaton) FindAll(haystack []byte, n int) []Match {
 }
 
 // FindAllOverlapping returns all overlapping matches in the haystack.
-// This may return multiple matches at the same position.
 func (a *Automaton) FindAllOverlapping(haystack []byte) []Match {
 	var matches []Match
-	state := a.nfa.startState
+
+	d := a.dfa
+	trans := d.transFlagged
+	classes := &d.byteClasses.classes
+	sid := d.startID
+	patternLens := d.patternLens
+
+	if len(trans) > 0 {
+		_ = trans[len(trans)-1]
+	}
 
 	for i, b := range haystack {
-		state = a.nfa.nextState(state, b)
+		raw := trans[int(sid&matchMask)+int(classes[b])]
+		sid = raw
 
-		if a.nfa.isMatch(state) {
-			for _, patternID := range a.nfa.getMatches(state) {
-				pattern := a.patterns[patternID]
-				matchEnd := i + 1
-				matchStart := matchEnd - len(pattern)
+		if raw&matchFlag == 0 {
+			continue
+		}
 
-				matches = append(matches, Match{
-					PatternID: int(patternID),
-					Start:     matchStart,
-					End:       matchEnd,
-				})
-			}
+		cleanSid := sid & matchMask
+		for _, patternID := range d.getMatches(cleanSid) {
+			matchEnd := i + 1
+			matchStart := matchEnd - patternLens[patternID]
+
+			matches = append(matches, Match{
+				PatternID: int(patternID),
+				Start:     matchStart,
+				End:       matchEnd,
+			})
 		}
 	}
 
@@ -217,14 +218,14 @@ func (a *Automaton) Count(haystack []byte) int {
 	pos := 0
 
 	for pos < len(haystack) {
-		match := a.Find(haystack, pos)
-		if match == nil {
+		m := a.Find(haystack, pos)
+		if m == nil {
 			break
 		}
 		count++
-		pos = match.End
-		if pos <= match.Start {
-			pos = match.Start + 1
+		pos = m.End
+		if pos <= m.Start {
+			pos = m.Start + 1
 		}
 	}
 
@@ -245,9 +246,8 @@ func (a *Automaton) Pattern(id int) []byte {
 }
 
 // StateCount returns the number of states in the underlying automaton.
-// This is useful for debugging and performance analysis.
 func (a *Automaton) StateCount() int {
-	return a.nfa.stateCount()
+	return a.dfa.stateCount
 }
 
 // MatchKind returns the match semantics used by this automaton.

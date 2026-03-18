@@ -92,11 +92,15 @@ func (b *Builder) Build() (*Automaton, error) {
 		bc = NewSingletonByteClasses()
 	}
 
-	// Build the optimized NFA (dense array transitions)
+	// Phase 1: Build the NFA (trie + failure links + match propagation)
 	nfa := buildOptimizedNFA(b.patterns, bc, b.matchKind)
 
+	// Phase 2: Compile NFA into a fully resolved DFA
+	// All failure transitions are pre-computed into the flat transition table.
+	dfa := buildDFA(nfa, b.patterns, b.matchKind)
+
 	return &Automaton{
-		nfa:       nfa,
+		dfa:       dfa,
 		patterns:  b.patterns,
 		matchKind: b.matchKind,
 	}, nil
