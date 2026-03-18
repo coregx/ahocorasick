@@ -4,6 +4,8 @@
 [![Tests](https://github.com/coregx/ahocorasick/actions/workflows/ci.yml/badge.svg)](https://github.com/coregx/ahocorasick/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/coregx/ahocorasick)](https://goreportcard.com/report/github.com/coregx/ahocorasick)
 [![codecov](https://codecov.io/gh/coregx/ahocorasick/branch/main/graph/badge.svg)](https://codecov.io/gh/coregx/ahocorasick)
+[![Release](https://img.shields.io/github/v/release/coregx/ahocorasick)](https://github.com/coregx/ahocorasick/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 High-performance Aho-Corasick multi-pattern string matching for Go.
 
