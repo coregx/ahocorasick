@@ -30,6 +30,9 @@ jobs:
   unit-tests:
     name: Unit Tests - ${{ matrix.os }} - Go ${{ matrix.go-version }}
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write  # Required for Codecov OIDC
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
@@ -61,12 +64,12 @@ jobs:
 
     - name: Upload coverage to Codecov
       if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25'
-      uses: codecov/codecov-action@v4
-      continue-on-error: true
+      uses: codecov/codecov-action@v5
       with:
-        file: ./coverage.txt
+        use_oidc: true
+        files: ./coverage.txt
         flags: unittests
-        name: codecov-unit
+        fail_ci_if_error: false
 
   # 32-bit build verification (GOARCH=386)
   build-386:
