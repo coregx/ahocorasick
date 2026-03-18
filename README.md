@@ -139,6 +139,10 @@ Search: IsMatch / Find / FindAll
 - **DNA sequencing** — find multiple motifs simultaneously
 - **Regex acceleration** — as prefilter for `foo|bar|baz` alternations
 
+## Articles
+
+- [Aho-Corasick in Go: Multi-Pattern String Matching at 6 GB/s with Zero Allocations](https://dev.to/kolkov/aho-corasick-in-go-multi-pattern-string-matching-at-6-gbs-with-zero-allocations-2jog) — Deep dive into the DFA compilation, SIMD prefilter, and optimization techniques
+
 ## Related Projects
 
 - [coregex](https://github.com/coregx/coregex) — High-performance regex engine (uses this library)
