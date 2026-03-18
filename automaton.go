@@ -13,12 +13,28 @@ type Automaton struct {
 // Find returns the first match in haystack starting at or after position start.
 // Returns nil if no match is found.
 // Uses the flagged transition table for inline match detection.
+// Prefilter: skips ahead using bytes.IndexByte when no start byte is nearby.
 func (a *Automaton) Find(haystack []byte, start int) *Match {
 	if start >= len(haystack) {
 		return nil
 	}
 
 	d := a.dfa
+
+	// Prefilter: if no start byte exists in haystack[start:], no match possible.
+	if sb := d.startBytes; len(sb) > 0 {
+		found := false
+		for _, b := range sb {
+			if bytes.IndexByte(haystack[start:], b) >= 0 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil
+		}
+	}
+
 	trans := d.trans
 	classes := &d.byteClasses.classes
 	sid := d.startID
