@@ -215,22 +215,59 @@ func findEarliestStartByte(data []byte, startBytes []byte) int {
 
 // FindAll returns all non-overlapping matches in the haystack.
 // If n >= 0, at most n matches are returned.
+// Uses an inline DFA loop to avoid per-match heap allocations.
 func (a *Automaton) FindAll(haystack []byte, n int) []Match {
-	var matches []Match
-	pos := 0
+	if len(haystack) == 0 {
+		return nil
+	}
 
-	for pos < len(haystack) && (n < 0 || len(matches) < n) {
-		m := a.Find(haystack, pos)
-		if m == nil {
+	d := a.dfa
+	trans := d.trans
+	classes := &d.byteClasses.classes
+	patternLens := d.patternLens
+	var sid uint32 // startID = 0
+
+	if len(trans) > 0 {
+		_ = trans[len(trans)-1]
+	}
+
+	var matches []Match
+
+	for i := 0; i < len(haystack); i++ {
+		if n >= 0 && len(matches) >= n {
 			break
 		}
 
-		matches = append(matches, *m)
+		raw := trans[int(sid)+int(classes[haystack[i]])]
 
-		pos = m.End
-		if pos <= m.Start {
-			pos = m.Start + 1
+		if raw&matchFlag == 0 {
+			sid = raw
+			continue
 		}
+
+		sid = raw & matchMask
+		allMatches := d.getMatches(sid)
+		if len(allMatches) == 0 {
+			continue
+		}
+
+		// For LeftmostFirst, take the first pattern.
+		patternID := allMatches[0]
+		patLen := patternLens[patternID]
+		matchEnd := i + 1
+		matchStart := matchEnd - patLen
+
+		matches = append(matches, Match{
+			PatternID: int(patternID),
+			Start:     matchStart,
+			End:       matchEnd,
+		})
+
+		// Non-overlapping: skip past this match and reset to start state.
+		if matchEnd > i+1 {
+			i = matchEnd - 1 // loop will i++
+		}
+		sid = 0 // reset to start state
 	}
 
 	return matches
