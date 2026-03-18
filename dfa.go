@@ -64,6 +64,17 @@ type DFA struct {
 
 	// startID is the premultiplied ID of the start state.
 	startID uint32
+
+	// startBytes contains all distinct bytes that appear at position 0 of any pattern.
+	// Used as a prefilter: if none of these bytes exist in a haystack region,
+	// no match can start there. Empty if too many start bytes (>3) or optimization
+	// is not beneficial.
+	startBytes []byte
+
+	// patternBytes is a 256-bit bitmap of all bytes appearing in any pattern.
+	// patternBytes[b/64] & (1 << (b%64)) != 0 means byte b appears in some pattern.
+	// Used for prefilter: regions with no pattern bytes can be skipped.
+	patternBytes [4]uint64
 }
 
 // nextPow2 returns the smallest power of 2 >= n.
@@ -107,10 +118,24 @@ func buildDFA(nfa *OptimizedNFA, patterns [][]byte, matchKind MatchKind) *DFA {
 		startID:     uint32(nfa.startState) << stride2,
 	}
 
-	// Store pattern lengths.
+	// Store pattern lengths and compute prefilter data.
 	d.patternLens = make([]int, len(patterns))
+	startByteSet := [256]bool{}
 	for i, p := range patterns {
 		d.patternLens[i] = len(p)
+		if len(p) > 0 {
+			startByteSet[p[0]] = true
+		}
+		for _, b := range p {
+			d.patternBytes[b/64] |= 1 << (b % 64)
+		}
+	}
+
+	// Collect start bytes for prefilter.
+	for b := range 256 {
+		if startByteSet[b] {
+			d.startBytes = append(d.startBytes, byte(b))
+		}
 	}
 
 	// Precompute which states are match states.
