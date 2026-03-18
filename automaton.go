@@ -43,15 +43,18 @@ func (a *Automaton) Find(haystack []byte, start int) *Match {
 	var bestMatch *Match
 
 	for i := start; i < len(haystack); i++ {
-		raw := trans[int(sid&matchMask)+int(classes[haystack[i]])]
-		sid = raw
+		raw := trans[int(sid)+int(classes[haystack[i]])]
 
+		// Common path (no match): raw has no flag, IS the clean state ID.
+		// No masking needed — saves one AND per byte.
 		if raw&matchFlag == 0 {
+			sid = raw
 			continue
 		}
 
-		cleanSid := sid & matchMask
-		matches := d.getMatches(cleanSid)
+		// Rare path: match state reached. Clear the flag.
+		sid = raw & matchMask
+		matches := d.getMatches(sid)
 		if len(matches) == 0 {
 			continue
 		}
@@ -97,20 +100,20 @@ func (a *Automaton) FindAt(haystack []byte, start int) *Match {
 	var bestMatch *Match
 
 	for i := start; i < len(haystack); i++ {
-		prevSid := sid & matchMask
-		raw := trans[int(prevSid)+int(classes[haystack[i]])]
-		sid = raw
+		prevSid := sid
+		raw := trans[int(sid)+int(classes[haystack[i]])]
 
 		if prevSid == startID && i > start {
 			break
 		}
 
 		if raw&matchFlag == 0 {
+			sid = raw
 			continue
 		}
 
-		cleanSid := sid & matchMask
-		for _, patternID := range d.getMatches(cleanSid) {
+		sid = raw & matchMask
+		for _, patternID := range d.getMatches(sid) {
 			patLen := patternLens[patternID]
 			matchEnd := i + 1
 			matchStart := matchEnd - patLen
@@ -248,15 +251,15 @@ func (a *Automaton) FindAllOverlapping(haystack []byte) []Match {
 	}
 
 	for i, b := range haystack {
-		raw := trans[int(sid&matchMask)+int(classes[b])]
-		sid = raw
+		raw := trans[int(sid)+int(classes[b])]
 
 		if raw&matchFlag == 0 {
+			sid = raw
 			continue
 		}
 
-		cleanSid := sid & matchMask
-		for _, patternID := range d.getMatches(cleanSid) {
+		sid = raw & matchMask
+		for _, patternID := range d.getMatches(sid) {
 			matchEnd := i + 1
 			matchStart := matchEnd - patternLens[patternID]
 
