@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-03-18
+
+Major performance release: DFA compilation with SIMD-accelerated prefilter.
+
+### Changed
+
+- **DFA backend** replaces NFA for search. All failure transitions are pre-computed
+  into a flat `[]uint32` transition table at build time, eliminating failure link
+  following at search time entirely. Premultiplied state IDs allow single-instruction
+  transitions: `trans[sid + byteClass]`.
+
+- **Match flag in transition table**. High bit of each transition entry indicates
+  whether the target state is a match state. Non-match bytes require zero masking
+  in the hot loop — the raw value IS the clean state ID.
+
+- **Inline DFA loop in FindAll**. Previously delegated to `Find()` per match,
+  causing heap allocation for each `*Match`. Now uses a single DFA traversal
+  with stack-allocated match values. Allocations reduced from 14 to 4 per call.
+
+### Added
+
+- **SIMD-accelerated start byte prefilter**. Before running the DFA, uses
+  `bytes.IndexByte` (SIMD-optimized on amd64/arm64) to check if any pattern
+  start byte exists in the haystack. If none found, returns immediately.
+
+- **Skip-ahead prefilter inside search loop**. When the DFA returns to start
+  state during search, re-engages the prefilter to skip ahead to the next
+  position where a match could start. Avoids processing long runs of
+  non-pattern bytes one at a time.
+
+- `findEarliestStartByte` helper for prefilter position scanning.
+
+### Performance
+
+Benchmarks on Intel i7-1255U (64KB haystack, 4-7 patterns):
+
+| Method | v0.1.0 | **v0.2.1** | Improvement |
+|--------|--------|-----------|-------------|
+| `Find` | 300 MB/s | **3.4 GB/s** | **11x** |
+| `IsMatch` (no match) | 260 MB/s | **5.9 GB/s** | **23x** |
+| `IsMatch` (match@32KB) | 545 MB/s | **7.0 GB/s** | **13x** |
+| `FindAll` (77B, 10 matches) | 40 MB/s | **100 MB/s** | **2.5x** |
+
+Memory: DFA uses a single flat array (~25KB for 100 states, stride 64).
+Zero heap allocations for `IsMatch`.
+
 ## [0.1.0] - 2026-01-05
 
 Initial release of the high-performance Aho-Corasick library for Go.
@@ -36,22 +82,6 @@ Initial release of the high-performance Aho-Corasick library for Go.
   - Precomputed root transitions (no failure link following for root)
   - Zero-allocation `IsMatch()` hot path
 
-### Performance
-
-Benchmarks on Intel i7-1255U (64KB haystack, 4 patterns):
-
-| Method | Throughput | Allocations |
-|--------|------------|-------------|
-| `IsMatch` (with match) | 1.6 GB/s | 0 |
-| `Find` | 1.1 GB/s | 1 |
-| `IsMatch` (no match) | 780 MB/s | 0 |
-
-### Testing
-
-- 27 unit tests covering core functionality
-- 2 fuzz tests verifying correctness against `bytes.Contains`/`bytes.Index`
-- 93% code coverage
-- CI on Linux, Windows, macOS with race detector
-
-[Unreleased]: https://github.com/coregx/ahocorasick/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/coregx/ahocorasick/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/coregx/ahocorasick/compare/v0.1.0...v0.2.1
 [0.1.0]: https://github.com/coregx/ahocorasick/releases/tag/v0.1.0

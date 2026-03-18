@@ -9,4 +9,4 @@
 package ahocorasick
 
 // Version is the current library version.
-const Version = "0.1.0-dev"
+const Version = "0.2.1"

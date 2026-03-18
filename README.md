@@ -9,8 +9,9 @@ High-performance Aho-Corasick multi-pattern string matching for Go.
 
 ## Features
 
-- **1+ GB/s throughput** — comparable to Rust's [aho-corasick](https://github.com/BurntSushi/aho-corasick)
-- **Dense array transitions** — optimized NFA with O(1) state transitions
+- **Up to 7 GB/s throughput** — DFA compilation with SIMD-accelerated prefilter
+- **Flat transition table** — fully compiled DFA with premultiplied state IDs
+- **SIMD prefilter** — `bytes.IndexByte` skip-ahead for non-matching regions
 - **Byte class compression** — reduces memory by grouping equivalent bytes
 - **Multiple match semantics** — LeftmostFirst (Perl) and LeftmostLongest (POSIX)
 - **Zero dependencies** — pure Go, no cgo
@@ -22,7 +23,7 @@ High-performance Aho-Corasick multi-pattern string matching for Go.
 go get github.com/coregx/ahocorasick
 ```
 
-Requires Go 1.21+
+Requires Go 1.25+
 
 ## Quick Start
 
@@ -62,15 +63,21 @@ func main() {
 
 ## Performance
 
-Benchmarks on Intel i7-1255U (64KB haystack, 4 patterns):
+Benchmarks on Intel i7-1255U (64KB haystack, 4-7 patterns):
 
 | Method | Throughput | Allocations |
 |--------|------------|-------------|
-| `IsMatch` (with match) | **1.6 GB/s** | 0 |
-| `Find` | **1.1 GB/s** | 1 |
-| `IsMatch` (no match) | 780 MB/s | 0 |
+| `IsMatch` (with match) | **7.0 GB/s** | 0 |
+| `IsMatch` (no match) | **5.9 GB/s** | 0 |
+| `Find` | **3.4 GB/s** | 1 |
+| `FindAll` (77B input) | 100 MB/s | 4 |
 
-Comparable to Rust's aho-corasick crate (~1-2 GB/s).
+### How it achieves this
+
+1. **DFA compilation** — all failure transitions pre-computed at build time into a flat `[]uint32` array. Search is a single table lookup per byte: `trans[sid + class]`.
+2. **SIMD prefilter** — before running the DFA, `bytes.IndexByte` (SSE2/AVX2 on amd64) scans for pattern start bytes. Skips entire regions where no match is possible.
+3. **Skip-ahead on start state** — when the DFA returns to its start state during search, the prefilter re-engages to jump ahead, avoiding byte-by-byte scanning of non-matching text.
+4. **Match flag embedding** — the high bit of each transition entry flags match states, enabling single-instruction match detection with no separate lookup.
 
 ## API
 
@@ -108,6 +115,20 @@ LeftmostFirst   // First pattern in list wins (Perl-compatible, default)
 LeftmostLongest // Longest pattern wins (POSIX-compatible)
 ```
 
+## Architecture
+
+```
+Builder.Build()
+  -> NFA construction (trie + failure links)
+  -> DFA compilation (flat transition table, premultiplied state IDs)
+  -> Prefilter setup (start byte collection for SIMD scanning)
+
+Search: IsMatch / Find / FindAll
+  -> SIMD prefilter (bytes.IndexByte skip-ahead)
+  -> DFA traversal (trans[sid + class], one operation per byte)
+  -> Match flag check (raw & matchFlag, one AND per byte)
+```
+
 ## Use Cases
 
 - **Log analysis** — scan for error patterns in log files
@@ -115,16 +136,6 @@ LeftmostLongest // Longest pattern wins (POSIX-compatible)
 - **Network security** — signature-based detection
 - **DNA sequencing** — find multiple motifs simultaneously
 - **Regex acceleration** — as prefilter for `foo|bar|baz` alternations
-
-## How It Works
-
-The [Aho-Corasick algorithm](https://en.wikipedia.org/wiki/Aho%E2%80%93Corasick_algorithm) builds a finite automaton from patterns:
-
-1. **Trie construction** — patterns form a prefix tree
-2. **Failure links** — enable backtracking without re-reading input
-3. **Dense transitions** — O(1) state lookup via byte class indexing
-
-This allows matching all patterns simultaneously in O(n) time regardless of pattern count.
 
 ## Related Projects
 
