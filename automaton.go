@@ -21,18 +21,16 @@ func (a *Automaton) Find(haystack []byte, start int) *Match {
 
 	d := a.dfa
 
-	// Prefilter: if no start byte exists in haystack[start:], no match possible.
-	if sb := d.startBytes; len(sb) > 0 {
-		found := false
-		for _, b := range sb {
-			if bytes.IndexByte(haystack[start:], b) >= 0 {
-				found = true
-				break
-			}
-		}
-		if !found {
+	// Skip-ahead prefilter: jump directly to first start byte position.
+	// Only engaged for haystacks >= 128 bytes to avoid overhead on short inputs.
+	sb := d.startBytes
+	remaining := len(haystack) - start
+	if len(sb) > 0 && remaining >= 128 {
+		skip := findEarliestStartByte(haystack[start:], sb)
+		if skip < 0 {
 			return nil
 		}
+		start += skip
 	}
 
 	trans := d.trans
@@ -143,28 +141,28 @@ func (a *Automaton) FindAt(haystack []byte, start int) *Match {
 // IsMatch returns true if any pattern matches anywhere in the haystack.
 // This is the most optimized search path — zero allocations, minimal branching.
 //
-// Prefilter: uses SIMD-accelerated bytes.IndexByte to check if any pattern
-// start byte exists in the haystack. If none found, returns false immediately.
-// This makes the no-match worst case 100-1000x faster.
+// Uses a two-level prefilter strategy:
+//  1. Skip-ahead: use SIMD bytes.IndexByte to jump directly to positions where
+//     a match could start, skipping all non-pattern bytes in bulk.
+//  2. DFA scan: run the automaton from the skip position to verify the match.
 //
-// DFA hot loop per byte: 1 class lookup, 1 table lookup, 1 AND check.
+// If the automaton returns to start state during scanning, it re-engages
+// the prefilter to skip ahead again. This is the same strategy as BurntSushi's
+// Rust implementation.
 func (a *Automaton) IsMatch(haystack []byte) bool {
 	d := a.dfa
 
-	// Prefilter: check if any pattern start byte exists in haystack.
+	// Skip-ahead prefilter: find the earliest position where any start byte occurs.
 	// bytes.IndexByte is SIMD-optimized (~4ns per 64KB on amd64).
-	// If no start byte found, no pattern can possibly match.
-	if sb := d.startBytes; len(sb) > 0 {
-		found := false
-		for _, b := range sb {
-			if bytes.IndexByte(haystack, b) >= 0 {
-				found = true
-				break
-			}
-		}
-		if !found {
+	// Since the DFA at start state transitions back to start for non-pattern bytes,
+	// we can safely skip to the first start byte position.
+	sb := d.startBytes
+	if len(sb) > 0 {
+		start := findEarliestStartByte(haystack, sb)
+		if start < 0 {
 			return false
 		}
+		haystack = haystack[start:]
 	}
 
 	trans := d.trans
@@ -182,9 +180,34 @@ func (a *Automaton) IsMatch(haystack []byte) bool {
 			return true
 		}
 		sid = raw
+
+		// Re-engage prefilter when back at start state.
+		// This skips large runs of non-pattern bytes between potential matches.
+		if sid == 0 && len(sb) > 0 && i+1 < len(haystack) {
+			skip := findEarliestStartByte(haystack[i+1:], sb)
+			if skip < 0 {
+				return false
+			}
+			i += skip // loop will i++ to land on the start byte
+		}
 	}
 
 	return false
+}
+
+// findEarliestStartByte returns the earliest position in data where any of the
+// start bytes occurs. Returns -1 if none found.
+// Uses bytes.IndexByte which is SIMD-accelerated on amd64.
+func findEarliestStartByte(data []byte, startBytes []byte) int {
+	earliest := -1
+	for _, b := range startBytes {
+		if idx := bytes.IndexByte(data, b); idx >= 0 {
+			if earliest < 0 || idx < earliest {
+				earliest = idx
+			}
+		}
+	}
+	return earliest
 }
 
 // FindAll returns all non-overlapping matches in the haystack.
