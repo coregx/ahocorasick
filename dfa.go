@@ -146,7 +146,7 @@ func buildDFA(nfa *OptimizedNFA, patterns [][]byte, matchKind MatchKind) *DFA {
 	for si := range numStates {
 		rowOffset := si << stride2
 		for class := range alphabetLen {
-			next := resolveTransition(nfa, StateID(si), class) //nolint:gosec // bounded
+			next := resolveTransition(nfa, StateID(si), class)
 			premultiplied := uint32(next) << stride2
 			if isMatch[next] {
 				premultiplied |= matchFlag
@@ -175,13 +175,13 @@ func buildDFA(nfa *OptimizedNFA, patterns [][]byte, matchKind MatchKind) *DFA {
 		d.matchData = append(d.matchData, matches...)
 
 		if offset <= 0xFFFF && count <= 0xFFFF {
-			d.matchIndex[si] = uint32(offset<<16) | uint32(count) //nolint:gosec // bounded
+			d.matchIndex[si] = uint32(offset<<16) | uint32(count)
 		} else {
 			d.matchIndex[si] = 0xFFFFFFFF
 			if d.matchOverflow == nil {
 				d.matchOverflow = make(map[uint32][]PatternID)
 			}
-			d.matchOverflow[uint32(si)] = matches //nolint:gosec // bounded
+			d.matchOverflow[uint32(si)] = matches
 		}
 	}
 
@@ -210,15 +210,15 @@ func (d *DFA) getMatches(sid uint32) []PatternID {
 		return nil
 	}
 	if packed == 0xFFFFFFFF {
-		return d.matchOverflow[uint32(idx)]
+		return d.matchOverflow[idx]
 	}
 	offset := int(packed >> 16)
 	count := int(packed & 0xFFFF)
 	return d.matchData[offset : offset+count]
 }
 
-// memoryUsage returns the approximate heap memory used by this DFA in bytes.
-func (d *DFA) memoryUsage() int {
+// MemoryUsage returns the approximate heap memory used by this DFA in bytes.
+func (d *DFA) MemoryUsage() int {
 	return len(d.trans)*4 +
 		len(d.matchIndex)*4 +
 		len(d.matchData)*4 + len(d.patternLens)*8

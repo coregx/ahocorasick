@@ -83,7 +83,7 @@ func (nfa *OptimizedNFA) buildTrie(patterns [][]byte) {
 
 	// Add each pattern to the trie
 	for patternID, pattern := range patterns {
-		nfa.addPattern(pattern, PatternID(patternID)) //nolint:gosec // G115: bounded
+		nfa.addPattern(pattern, PatternID(patternID))
 	}
 }
 
@@ -99,7 +99,7 @@ func (nfa *OptimizedNFA) addPattern(pattern []byte, patternID PatternID) {
 			state = next
 		} else {
 			// Create new state with dense transitions
-			newState := StateID(len(nfa.states)) //nolint:gosec // G115: bounded
+			newState := StateID(len(nfa.states)) //nolint:gosec // G115: state count bounded by patterns
 			nfa.states = append(nfa.states, optState{
 				trans: make([]StateID, nfa.alphabetLen),
 				fail:  0,
