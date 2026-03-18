@@ -17,7 +17,7 @@ func (a *Automaton) Find(haystack []byte, start int) *Match {
 	}
 
 	d := a.dfa
-	trans := d.transFlagged
+	trans := d.trans
 	classes := &d.byteClasses.classes
 	sid := d.startID
 	patternLens := d.patternLens
@@ -70,7 +70,7 @@ func (a *Automaton) FindAt(haystack []byte, start int) *Match {
 	}
 
 	d := a.dfa
-	trans := d.transFlagged
+	trans := d.trans
 	classes := &d.byteClasses.classes
 	sid := d.startID
 	startID := d.startID
@@ -131,7 +131,7 @@ func (a *Automaton) FindAt(haystack []byte, start int) *Match {
 //
 // Hot loop per byte: 1 class lookup, 1 table lookup, 1 AND check.
 func (a *Automaton) IsMatch(haystack []byte) bool {
-	trans := a.dfa.transFlagged
+	trans := a.dfa.trans
 	classes := &a.dfa.byteClasses.classes
 	sid := a.dfa.startID // always 0
 
@@ -179,7 +179,7 @@ func (a *Automaton) FindAllOverlapping(haystack []byte) []Match {
 	var matches []Match
 
 	d := a.dfa
-	trans := d.transFlagged
+	trans := d.trans
 	classes := &d.byteClasses.classes
 	sid := d.startID
 	patternLens := d.patternLens

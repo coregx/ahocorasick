@@ -14,17 +14,16 @@ const matchMask uint32 = matchFlag - 1
 //   - All failure transitions are pre-computed into the transition table
 //   - Single flat []uint32 array for all transitions (cache-friendly)
 //   - Premultiplied state IDs: sid = stateIndex << stride2
-//   - Two transition tables: transClean (for IsMatch), transFlagged (for Find)
+//   - Match flag embedded in high bit of each transition value
 //   - Match check in IsMatch: bitmap[stateIndex/64] & (1 << (stateIndex%64))
 //   - Lookup: trans[sid + byteClass] — one addition, one load per byte
 type DFA struct {
-	// trans is the clean transition table (no match flags).
-	// Used by IsMatch for the tightest possible hot loop.
+	// trans is the flat transition table with match flags in the high bit.
+	// For non-match target states: value = premultiplied state ID.
+	// For match target states: value = premultiplied state ID | matchFlag.
+	// This allows the hot loop to check matches with a single AND operation,
+	// while non-match states need no masking (high bit is 0 = clean ID).
 	trans []uint32
-
-	// transFlagged has match flags in the high bit of each entry.
-	// Used by Find/FindAll where we need to detect matches inline.
-	transFlagged []uint32
 
 	// matchBitmap is a compact bitmap: one bit per state.
 	// matchBitmap[stateIndex/64] & (1 << (stateIndex%64)) != 0 means match.
@@ -114,34 +113,34 @@ func buildDFA(nfa *OptimizedNFA, patterns [][]byte, matchKind MatchKind) *DFA {
 		d.patternLens[i] = len(p)
 	}
 
+	// Precompute which states are match states.
+	isMatch := make([]bool, numStates)
+	for si := range numStates {
+		isMatch[si] = len(nfa.states[si].matches) > 0
+	}
+
 	// Build match bitmap: one bit per state.
 	bitmapLen := (numStates + 63) / 64
 	d.matchBitmap = make([]uint64, bitmapLen)
 	for si := range numStates {
-		if len(nfa.states[si].matches) > 0 {
+		if isMatch[si] {
 			d.matchBitmap[si/64] |= 1 << uint(si%64)
 		}
 	}
 
-	// Build both transition tables.
+	// Build transition table with embedded match flags.
 	tableSize := numStates * stride
 	d.trans = make([]uint32, tableSize)
-	d.transFlagged = make([]uint32, tableSize)
 
 	for si := range numStates {
 		rowOffset := si << stride2
 		for class := range alphabetLen {
 			next := resolveTransition(nfa, StateID(si), class) //nolint:gosec // bounded
 			premultiplied := uint32(next) << stride2
-
-			d.trans[rowOffset+class] = premultiplied
-
-			// Add match flag for the flagged table.
-			if len(nfa.states[next].matches) > 0 {
-				d.transFlagged[rowOffset+class] = premultiplied | matchFlag
-			} else {
-				d.transFlagged[rowOffset+class] = premultiplied
+			if isMatch[next] {
+				premultiplied |= matchFlag
 			}
+			d.trans[rowOffset+class] = premultiplied
 		}
 	}
 
@@ -209,7 +208,7 @@ func (d *DFA) getMatches(sid uint32) []PatternID {
 
 // memoryUsage returns the approximate heap memory used by this DFA in bytes.
 func (d *DFA) memoryUsage() int {
-	return len(d.trans)*4 + len(d.transFlagged)*4 +
+	return len(d.trans)*4 +
 		len(d.matchBitmap)*8 + len(d.matchIndex)*4 +
 		len(d.matchData)*4 + len(d.patternLens)*8
 }
