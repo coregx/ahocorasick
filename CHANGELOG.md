@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-05
+
+Zero-allocation API release. Breaking change: `Find` and `FindAt` now return `(Match, bool)` instead of `*Match`.
+
+### Changed
+
+- **`Find` returns `(Match, bool)` instead of `*Match`**. Match is returned by value,
+  eliminating the heap allocation. Throughput increased from 3.4 GB/s to 7.0 GB/s.
+  Callers must update from `if m := ac.Find(h, 0); m != nil` to
+  `if m, found := ac.Find(h, 0); found`.
+
+- **`FindAt` returns `(Match, bool)` instead of `*Match`**. Same zero-allocation
+  change as `Find`. Callers must update from `if m := ac.FindAt(h, 0); m != nil`
+  to `if m, found := ac.FindAt(h, 0); found`.
+
+### Added
+
+- `AGENTS.md` — AI agent documentation for library users (API reference, common patterns, performance)
+- `llms.txt` — LLM discovery file
+
+### Performance
+
+Benchmarks on Intel i7-1255U (64KB haystack, 4-7 patterns):
+
+| Method | v0.2.1 | **v0.3.0** | Improvement |
+|--------|--------|-----------|-------------|
+| `Find` | 3.4 GB/s (1 alloc) | **7.0 GB/s (0 alloc)** | **2x, zero alloc** |
+| `IsMatch` (match) | 7.0 GB/s | 7.0 GB/s | unchanged |
+| `IsMatch` (no match) | 5.9 GB/s | 5.9 GB/s | unchanged |
+
 ## [0.2.1] - 2026-03-18
 
 Major performance release: DFA compilation with SIMD-accelerated prefilter.
@@ -82,6 +112,7 @@ Initial release of the high-performance Aho-Corasick library for Go.
   - Precomputed root transitions (no failure link following for root)
   - Zero-allocation `IsMatch()` hot path
 
-[Unreleased]: https://github.com/coregx/ahocorasick/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/coregx/ahocorasick/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/coregx/ahocorasick/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/coregx/ahocorasick/compare/v0.1.0...v0.2.1
 [0.1.0]: https://github.com/coregx/ahocorasick/releases/tag/v0.1.0

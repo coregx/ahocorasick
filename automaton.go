@@ -11,12 +11,13 @@ type Automaton struct {
 }
 
 // Find returns the first match in haystack starting at or after position start.
-// Returns nil if no match is found.
 // Uses the flagged transition table for inline match detection.
 // Prefilter: skips ahead using bytes.IndexByte when no start byte is nearby.
-func (a *Automaton) Find(haystack []byte, start int) *Match {
+//
+// Zero allocations — the Match is returned by value.
+func (a *Automaton) Find(haystack []byte, start int) (Match, bool) {
 	if start >= len(haystack) {
-		return nil
+		return Match{}, false
 	}
 
 	d := a.dfa
@@ -28,7 +29,7 @@ func (a *Automaton) Find(haystack []byte, start int) *Match {
 	if len(sb) > 0 && remaining >= 128 {
 		skip := findEarliestStartByte(haystack[start:], sb)
 		if skip < 0 {
-			return nil
+			return Match{}, false
 		}
 		start += skip
 	}
@@ -40,7 +41,8 @@ func (a *Automaton) Find(haystack []byte, start int) *Match {
 
 	_ = trans[len(trans)-1]
 
-	var bestMatch *Match
+	var bestMatch Match
+	found := false
 
 	for i := start; i < len(haystack); i++ {
 		raw := trans[int(sid)+int(classes[haystack[i]])]
@@ -63,29 +65,31 @@ func (a *Automaton) Find(haystack []byte, start int) *Match {
 		matchEnd := i + 1
 		matchStart := matchEnd - patternLens[patternID]
 
-		m := &Match{
+		m := Match{
 			PatternID: int(patternID),
 			Start:     matchStart,
 			End:       matchEnd,
 		}
 
 		if a.matchKind == LeftmostFirst {
-			return m
+			return m, true
 		}
 
-		if bestMatch == nil || m.Len() > bestMatch.Len() {
+		if !found || m.Len() > bestMatch.Len() {
 			bestMatch = m
+			found = true
 		}
 	}
 
-	return bestMatch
+	return bestMatch, found
 }
 
 // FindAt returns the first match starting exactly at position start.
-// Returns nil if no match starts at the given position.
-func (a *Automaton) FindAt(haystack []byte, start int) *Match {
+//
+// Zero allocations — the Match is returned by value.
+func (a *Automaton) FindAt(haystack []byte, start int) (Match, bool) {
 	if start >= len(haystack) {
-		return nil
+		return Match{}, false
 	}
 
 	d := a.dfa
@@ -97,7 +101,8 @@ func (a *Automaton) FindAt(haystack []byte, start int) *Match {
 
 	_ = trans[len(trans)-1]
 
-	var bestMatch *Match
+	var bestMatch Match
+	found := false
 
 	for i := start; i < len(haystack); i++ {
 		prevSid := sid
@@ -122,23 +127,24 @@ func (a *Automaton) FindAt(haystack []byte, start int) *Match {
 				continue
 			}
 
-			m := &Match{
+			m := Match{
 				PatternID: int(patternID),
 				Start:     matchStart,
 				End:       matchEnd,
 			}
 
 			if a.matchKind == LeftmostFirst {
-				return m
+				return m, true
 			}
 
-			if bestMatch == nil || m.Len() > bestMatch.Len() {
+			if !found || m.Len() > bestMatch.Len() {
 				bestMatch = m
+				found = true
 			}
 		}
 	}
 
-	return bestMatch
+	return bestMatch, found
 }
 
 // IsMatch returns true if any pattern matches anywhere in the haystack.
@@ -317,8 +323,8 @@ func (a *Automaton) Count(haystack []byte) int {
 	pos := 0
 
 	for pos < len(haystack) {
-		m := a.Find(haystack, pos)
-		if m == nil {
+		m, found := a.Find(haystack, pos)
+		if !found {
 			break
 		}
 		count++

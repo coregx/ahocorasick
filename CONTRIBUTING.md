@@ -353,7 +353,7 @@ func BenchmarkFind(b *testing.B) {
 
     b.SetBytes(int64(len(haystack)))
     for i := 0; i < b.N; i++ {
-        _ = ac.Find(haystack, 0)
+        _, _ = ac.Find(haystack, 0)
     }
 }
 ```

@@ -1,0 +1,12 @@
+# ahocorasick — Coregx
+
+> High-performance Aho-Corasick multi-pattern string matching for Go. Up to 7 GB/s, zero allocations, pure Go.
+
+## Docs
+
+- [API Reference](https://pkg.go.dev/github.com/coregx/ahocorasick)
+- [AGENTS.md](https://github.com/coregx/ahocorasick/blob/main/AGENTS.md): AI agent instructions
+
+## Organization
+
+- [Coregx](https://github.com/coregx) — High-Performance Go Libraries

@@ -17,7 +17,7 @@ High-performance Aho-Corasick multi-pattern string matching for Go.
 - **Byte class compression** — reduces memory by grouping equivalent bytes
 - **Multiple match semantics** — LeftmostFirst (Perl) and LeftmostLongest (POSIX)
 - **Zero dependencies** — pure Go, no cgo
-- **Zero allocations** — `IsMatch()` hot path allocates nothing
+- **Zero allocations** — `IsMatch` and `Find` hot paths allocate nothing
 
 ## Installation
 
@@ -50,8 +50,8 @@ func main() {
         fmt.Println("Found a match!")
     }
 
-    // Find first match
-    if m := ac.Find(haystack, 0); m != nil {
+    // Find first match (zero allocation)
+    if m, found := ac.Find(haystack, 0); found {
         fmt.Printf("Found %q at position %d\n",
             haystack[m.Start:m.End], m.Start)
     }
@@ -71,7 +71,7 @@ Benchmarks on Intel i7-1255U (64KB haystack, 4-7 patterns):
 |--------|------------|-------------|
 | `IsMatch` (with match) | **7.0 GB/s** | 0 |
 | `IsMatch` (no match) | **5.9 GB/s** | 0 |
-| `Find` | **3.4 GB/s** | 1 |
+| `Find` | **7.0 GB/s** | 0 |
 | `FindAll` (77B input) | 100 MB/s | 4 |
 
 ### How it achieves this
@@ -98,11 +98,11 @@ ahocorasick.NewBuilder().
 // Existence check (zero allocation)
 ac.IsMatch(haystack []byte) bool
 
-// Find matches
-ac.Find(haystack []byte, start int) *Match      // First match from position
-ac.FindAt(haystack []byte, start int) *Match    // Match at exact position
-ac.FindAll(haystack []byte, n int) []Match      // All non-overlapping (n=-1 for all)
-ac.FindAllOverlapping(haystack []byte) []Match  // All including overlaps
+// Find matches (Find and FindAt are zero allocation)
+ac.Find(haystack []byte, start int) (Match, bool)      // First match from position
+ac.FindAt(haystack []byte, start int) (Match, bool)    // Match at exact position
+ac.FindAll(haystack []byte, n int) []Match              // All non-overlapping (n=-1 for all)
+ac.FindAllOverlapping(haystack []byte) []Match          // All including overlaps
 
 // Utilities
 ac.Count(haystack []byte) int   // Count non-overlapping matches

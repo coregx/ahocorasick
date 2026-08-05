@@ -26,15 +26,15 @@ func TestBasicMatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.haystack, func(t *testing.T) {
-			match := ac.Find([]byte(tt.haystack), 0)
+			match, found := ac.Find([]byte(tt.haystack), 0)
 			if tt.wantID < 0 {
-				if match != nil {
+				if found {
 					t.Errorf("expected no match, got %+v", match)
 				}
 				return
 			}
-			if match == nil {
-				t.Fatalf("expected match at %d, got nil", tt.wantPos)
+			if !found {
+				t.Fatalf("expected match at %d, got none", tt.wantPos)
 			}
 			if match.PatternID != tt.wantID {
 				t.Errorf("pattern ID = %d, want %d", match.PatternID, tt.wantID)
@@ -188,15 +188,15 @@ func TestSinglePattern(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.haystack, func(t *testing.T) {
-			match := ac.Find([]byte(tt.haystack), 0)
+			match, found := ac.Find([]byte(tt.haystack), 0)
 			if tt.wantPos < 0 {
-				if match != nil {
+				if found {
 					t.Errorf("expected no match, got %+v", match)
 				}
 				return
 			}
-			if match == nil {
-				t.Fatalf("expected match at %d, got nil", tt.wantPos)
+			if !found {
+				t.Fatalf("expected match at %d, got none", tt.wantPos)
 			}
 			if match.Start != tt.wantPos {
 				t.Errorf("start = %d, want %d", match.Start, tt.wantPos)
@@ -289,15 +289,15 @@ func TestSingleBytePatterns(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.haystack, func(t *testing.T) {
-			match := ac.Find([]byte(tt.haystack), 0)
+			match, found := ac.Find([]byte(tt.haystack), 0)
 			if tt.wantID < 0 {
-				if match != nil {
+				if found {
 					t.Errorf("expected no match, got %+v", match)
 				}
 				return
 			}
-			if match == nil {
-				t.Fatalf("expected match, got nil")
+			if !found {
+				t.Fatalf("expected match, got none")
 			}
 			if match.PatternID != tt.wantID {
 				t.Errorf("PatternID = %d, want %d", match.PatternID, tt.wantID)
@@ -324,8 +324,8 @@ func TestLongPatterns(t *testing.T) {
 	haystack := append([]byte("prefix"), longPattern...)
 	haystack = append(haystack, []byte("suffix")...)
 
-	match := ac.Find(haystack, 0)
-	if match == nil {
+	match, found := ac.Find(haystack, 0)
+	if !found {
 		t.Fatal("expected match for long pattern")
 	}
 	if match.Start != 6 {
@@ -346,8 +346,8 @@ func TestPrefixPatterns(t *testing.T) {
 	}
 
 	// LeftmostFirst should return "a"
-	match := ac.Find([]byte("abcd"), 0)
-	if match == nil {
+	match, found := ac.Find([]byte("abcd"), 0)
+	if !found {
 		t.Fatal("expected match")
 	}
 	if match.PatternID != 0 {
@@ -481,15 +481,15 @@ func TestFindAt(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.haystack, func(t *testing.T) {
-			match := ac.FindAt([]byte(tt.haystack), tt.start)
+			match, found := ac.FindAt([]byte(tt.haystack), tt.start)
 			if tt.wantID < 0 {
-				if match != nil {
+				if found {
 					t.Errorf("expected no match, got %+v", match)
 				}
 				return
 			}
-			if match == nil {
-				t.Fatal("expected match, got nil")
+			if !found {
+				t.Fatal("expected match, got none")
 			}
 			if match.PatternID != tt.wantID {
 				t.Errorf("PatternID = %d, want %d", match.PatternID, tt.wantID)
@@ -507,8 +507,8 @@ func TestLeftmostLongest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	match := ac.Find([]byte("abc"), 0)
-	if match == nil {
+	match, found := ac.Find([]byte("abc"), 0)
+	if !found {
 		t.Fatal("expected match")
 	}
 	// LeftmostLongest should return "abc" (pattern 2), not "a" (pattern 0)
@@ -564,8 +564,8 @@ func TestMatchMethods(t *testing.T) {
 		AddStrings([]string{"hello"}).
 		Build()
 
-	match := ac.Find([]byte("say hello world"), 0)
-	if match == nil {
+	match, found := ac.Find([]byte("say hello world"), 0)
+	if !found {
 		t.Fatal("expected match")
 	}
 
@@ -588,8 +588,8 @@ func TestEmptyHaystack(t *testing.T) {
 	if ac.IsMatch([]byte{}) {
 		t.Error("expected no match in empty haystack")
 	}
-	if ac.Find([]byte{}, 0) != nil {
-		t.Error("expected nil match in empty haystack")
+	if _, found := ac.Find([]byte{}, 0); found {
+		t.Error("expected no match in empty haystack")
 	}
 	if len(ac.FindAll([]byte{}, -1)) != 0 {
 		t.Error("expected no matches in empty haystack")
@@ -621,8 +621,8 @@ func TestManyPatterns(t *testing.T) {
 	// Test finding a few patterns
 	for _, i := range []int{0, 500, 999} {
 		haystack := []byte("xxx" + patterns[i] + "yyy")
-		match := ac.Find(haystack, 0)
-		if match == nil {
+		match, found := ac.Find(haystack, 0)
+		if !found {
 			t.Errorf("pattern %d not found", i)
 		} else if match.PatternID != i {
 			t.Errorf("pattern %d: got ID %d", i, match.PatternID)
@@ -766,18 +766,18 @@ func FuzzFind(f *testing.F) {
 			return
 		}
 
-		match := ac.Find(haystack, 0)
+		match, found := ac.Find(haystack, 0)
 
 		// Reference: bytes.Index
 		idx := bytes.Index(haystack, pattern)
 
 		// Compare results: check that our match position equals bytes.Index position
 		switch {
-		case idx < 0 && match != nil:
+		case idx < 0 && found:
 			t.Errorf("Find found match at %d, but bytes.Index returned -1", match.Start)
-		case idx >= 0 && match == nil:
-			t.Errorf("Find returned nil, but bytes.Index found at %d", idx)
-		case idx >= 0 && match != nil && match.Start != idx:
+		case idx >= 0 && !found:
+			t.Errorf("Find returned no match, but bytes.Index found at %d", idx)
+		case idx >= 0 && found && match.Start != idx:
 			t.Errorf("Find returned %d, bytes.Index returned %d", match.Start, idx)
 		}
 	})
@@ -800,7 +800,7 @@ func BenchmarkFind(b *testing.B) {
 	b.SetBytes(int64(len(haystack)))
 
 	for i := 0; i < b.N; i++ {
-		_ = ac.Find(haystack, 0)
+		_, _ = ac.Find(haystack, 0)
 	}
 }
 
