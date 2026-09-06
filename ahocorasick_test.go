@@ -498,6 +498,49 @@ func TestFindAt(t *testing.T) {
 	}
 }
 
+func TestFindAtLeftmostLongest(t *testing.T) {
+	ac, err := NewBuilder().
+		SetMatchKind(LeftmostLongest).
+		AddStrings([]string{"a", "ab", "abc"}).
+		Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name     string
+		haystack string
+		start    int
+		wantID   int
+		wantLen  int
+	}{
+		{"longest at start", "abcdef", 0, 2, 3},
+		{"longest at offset", "XXabcdef", 2, 2, 3},
+		{"no match at offset", "XXabcdef", 1, -1, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, found := ac.FindAt([]byte(tt.haystack), tt.start)
+			if tt.wantID < 0 {
+				if found {
+					t.Errorf("expected no match, got %+v", m)
+				}
+				return
+			}
+			if !found {
+				t.Fatal("expected match, got none")
+			}
+			if m.PatternID != tt.wantID {
+				t.Errorf("PatternID = %d, want %d", m.PatternID, tt.wantID)
+			}
+			if m.Len() != tt.wantLen {
+				t.Errorf("Len() = %d, want %d", m.Len(), tt.wantLen)
+			}
+		})
+	}
+}
+
 func TestLeftmostLongest(t *testing.T) {
 	ac, err := NewBuilder().
 		SetMatchKind(LeftmostLongest).
@@ -514,6 +557,125 @@ func TestLeftmostLongest(t *testing.T) {
 	// LeftmostLongest should return "abc" (pattern 2), not "a" (pattern 0)
 	if match.PatternID != 2 {
 		t.Errorf("PatternID = %d, want 2 (pattern 'abc')", match.PatternID)
+	}
+}
+
+func TestLeftmostLongestMaxLenEarlyReturn(t *testing.T) {
+	tests := []struct {
+		name     string
+		patterns []string
+		haystack string
+		wantID   int
+		wantLen  int
+	}{
+		{
+			name:     "returns longest when max-length match found early",
+			patterns: []string{"a", "abc"},
+			haystack: "abcXXXXXXXXXXXX",
+			wantID:   1,
+			wantLen:  3,
+		},
+		{
+			name:     "prefix chain selects longest",
+			patterns: []string{"a", "ab", "abc", "abcd"},
+			haystack: "abcdYYYYYYYYYYYY",
+			wantID:   3,
+			wantLen:  4,
+		},
+		{
+			name:     "single pattern returns immediately",
+			patterns: []string{"xyz"},
+			haystack: "xyzxyzxyz",
+			wantID:   0,
+			wantLen:  3,
+		},
+		{
+			name:     "equal-length patterns: first max-length match wins",
+			patterns: []string{"abc", "xyz"},
+			haystack: "abcxyz",
+			wantID:   0,
+			wantLen:  3,
+		},
+		{
+			name:     "match not at start of haystack",
+			patterns: []string{"a", "abcdef"},
+			haystack: "ZZZZZZabcdefZZZZ",
+			wantID:   1,
+			wantLen:  6,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ac, err := NewBuilder().
+				SetMatchKind(LeftmostLongest).
+				AddStrings(tt.patterns).
+				Build()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			m, found := ac.Find([]byte(tt.haystack), 0)
+			if !found {
+				t.Fatal("expected match, got none")
+			}
+			if m.PatternID != tt.wantID {
+				t.Errorf("PatternID = %d, want %d", m.PatternID, tt.wantID)
+			}
+			if m.Len() != tt.wantLen {
+				t.Errorf("Len() = %d, want %d", m.Len(), tt.wantLen)
+			}
+		})
+	}
+}
+
+func TestLeftmostLongestCount(t *testing.T) {
+	tests := []struct {
+		name     string
+		patterns []string
+		haystack string
+		want     int
+	}{
+		{
+			name:     "dense single-byte",
+			patterns: []string{"a"},
+			haystack: "aaaa",
+			want:     4,
+		},
+		{
+			name:     "dense with longer pattern",
+			patterns: []string{"a", "aa"},
+			haystack: "aaaa",
+			want:     2,
+		},
+		{
+			name:     "non-overlapping multi-pattern",
+			patterns: []string{"ab", "abcd"},
+			haystack: "abcdabcd",
+			want:     2,
+		},
+		{
+			name:     "no match",
+			patterns: []string{"xyz"},
+			haystack: "aaaa",
+			want:     0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ac, err := NewBuilder().
+				SetMatchKind(LeftmostLongest).
+				AddStrings(tt.patterns).
+				Build()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got := ac.Count([]byte(tt.haystack)); got != tt.want {
+				t.Errorf("Count() = %d, want %d", got, tt.want)
+			}
+		})
 	}
 }
 
