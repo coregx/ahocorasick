@@ -79,6 +79,9 @@ func (a *Automaton) Find(haystack []byte, start int) (Match, bool) {
 			bestMatch = m
 			found = true
 		}
+		if bestMatch.Len() == d.maxPatternLen {
+			return bestMatch, true
+		}
 	}
 
 	return bestMatch, found

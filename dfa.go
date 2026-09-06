@@ -54,6 +54,9 @@ type DFA struct {
 	// patternLens stores the length of each pattern (for computing match start).
 	patternLens []int
 
+	// maxPatternLen bounds searches once no longer match is possible.
+	maxPatternLen int
+
 	// matchKind specifies match semantics.
 	matchKind MatchKind
 
@@ -118,6 +121,9 @@ func buildDFA(nfa *OptimizedNFA, patterns [][]byte, matchKind MatchKind) *DFA {
 	startByteSet := [256]bool{}
 	for i, p := range patterns {
 		d.patternLens[i] = len(p)
+		if len(p) > d.maxPatternLen {
+			d.maxPatternLen = len(p)
+		}
 		if len(p) > 0 {
 			startByteSet[p[0]] = true
 		}

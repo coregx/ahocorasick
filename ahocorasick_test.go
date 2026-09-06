@@ -877,3 +877,19 @@ func BenchmarkIsMatchWithMatch(b *testing.B) {
 		_ = ac.IsMatch(haystack)
 	}
 }
+
+func BenchmarkCountLeftmostLongest(b *testing.B) {
+	ac, err := NewBuilder().
+		SetMatchKind(LeftmostLongest).
+		AddStrings([]string{"a"}).
+		Build()
+	if err != nil {
+		b.Fatal(err)
+	}
+	haystack := bytes.Repeat([]byte("a"), 2048)
+	b.SetBytes(int64(len(haystack)))
+
+	for b.Loop() {
+		_ = ac.Count(haystack)
+	}
+}
