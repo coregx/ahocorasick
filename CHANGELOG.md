@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-06
+
+Patch release: LeftmostLongest early termination optimization (community contribution by [@MikeeI](https://github.com/MikeeI)).
+
+### Performance
+
+- **`Find` with `LeftmostLongest`: early return at maximum pattern length**.
+  Once the best match reaches the length of the longest compiled pattern,
+  no later match can replace it — `Find` now returns immediately instead of
+  scanning the remaining haystack. Eliminates O(n·m) behavior in `Count` +
+  `LeftmostLongest` on dense workloads. On a 2048-byte single-byte haystack:
+  8.1 ms → 30 µs per `Count` call.
+
+- **`FindAt` with `LeftmostLongest`: same early return** applied for consistency.
+
+### Added
+
+- Correctness tests for `LeftmostLongest` early termination: `Find`, `FindAt`,
+  and `Count` with prefix chains, equal-length ties, and dense single-byte inputs.
+
 ## [0.3.0] - 2026-08-05
 
 Zero-allocation API release. Breaking change: `Find` and `FindAt` now return `(Match, bool)` instead of `*Match`.
@@ -112,7 +132,8 @@ Initial release of the high-performance Aho-Corasick library for Go.
   - Precomputed root transitions (no failure link following for root)
   - Zero-allocation `IsMatch()` hot path
 
-[Unreleased]: https://github.com/coregx/ahocorasick/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/coregx/ahocorasick/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/coregx/ahocorasick/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/coregx/ahocorasick/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/coregx/ahocorasick/compare/v0.1.0...v0.2.1
 [0.1.0]: https://github.com/coregx/ahocorasick/releases/tag/v0.1.0

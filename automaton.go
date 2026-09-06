@@ -145,6 +145,9 @@ func (a *Automaton) FindAt(haystack []byte, start int) (Match, bool) {
 				found = true
 			}
 		}
+		if found && bestMatch.Len() == d.maxPatternLen {
+			return bestMatch, true
+		}
 	}
 
 	return bestMatch, found

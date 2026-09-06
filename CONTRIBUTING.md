@@ -2,125 +2,49 @@
 
 Thank you for considering contributing to ahocorasick! This document outlines the development workflow and guidelines.
 
-## Git Workflow (Git-Flow)
+## Git Workflow (GitHub Flow)
 
-This project uses Git-Flow branching model for development.
+This project uses GitHub Flow — a single `main` branch with feature branches merged via pull requests.
 
 ### Branch Structure
 
 ```
 main                 # Production-ready code (tagged releases)
-  └─ develop         # Integration branch for next release
-       ├─ feature/*  # New features
-       ├─ bugfix/*   # Bug fixes
-       └─ hotfix/*   # Critical fixes from main
+  ├─ feat/*          # New features
+  ├─ fix/*           # Bug fixes
+  ├─ perf/*          # Performance improvements
+  └─ release/*       # Release preparation
 ```
 
-### Branch Purposes
+### Workflow
 
-- **main**: Production-ready code. Only releases are merged here.
-- **develop**: Active development branch. All features merge here first.
-- **feature/\***: New features. Branch from `develop`, merge back to `develop`.
-- **bugfix/\***: Bug fixes. Branch from `develop`, merge back to `develop`.
-- **hotfix/\***: Critical production fixes. Branch from `main`, merge to both `main` and `develop`.
+1. **Create a feature branch** from `main`:
+   ```bash
+   git checkout main
+   git pull origin main
+   git checkout -b feat/my-new-feature
+   ```
 
-### Workflow Commands
+2. **Work on your changes**, committing as you go:
+   ```bash
+   git add .
+   git commit -m "feat: add my new feature"
+   ```
 
-#### Starting a New Feature
+3. **Push and create a pull request**:
+   ```bash
+   git push -u origin feat/my-new-feature
+   gh pr create --title "feat: my new feature"
+   ```
 
-```bash
-# Create feature branch from develop
-git checkout develop
-git pull origin develop
-git checkout -b feature/my-new-feature
+4. **Wait for CI** — all checks must pass (tests, lint, formatting on 3 OS).
 
-# Work on your feature...
-git add .
-git commit -m "feat: add my new feature"
+5. **Squash merge** into `main` after review:
+   ```bash
+   gh pr merge --squash
+   ```
 
-# When done, merge back to develop
-git checkout develop
-git merge --squash feature/my-new-feature  # Squash merge for clean history
-git commit -m "feat: my new feature (squashed)"
-git branch -d feature/my-new-feature
-git push origin develop
-```
-
-#### Fixing a Bug
-
-```bash
-# Create bugfix branch from develop
-git checkout develop
-git pull origin develop
-git checkout -b bugfix/fix-issue-123
-
-# Fix the bug...
-git add .
-git commit -m "fix: resolve issue #123"
-
-# Merge back to develop
-git checkout develop
-git merge --squash bugfix/fix-issue-123  # Squash merge for clean history
-git commit -m "fix: resolve issue #123 (squashed)"
-git branch -d bugfix/fix-issue-123
-git push origin develop
-```
-
-#### Creating a Release
-
-```bash
-# Create release branch from develop
-git checkout develop
-git pull origin develop
-git checkout -b release/v0.2.0
-
-# Update version numbers, CHANGELOG, etc.
-git add .
-git commit -m "chore: prepare release v0.2.0"
-
-# Merge to main and tag
-git checkout main
-git merge --no-ff release/v0.2.0
-git tag -a v0.2.0 -m "Release v0.2.0"
-
-# Merge back to develop
-git checkout develop
-git merge --no-ff release/v0.2.0
-
-# Delete release branch
-git branch -d release/v0.2.0
-
-# Push everything
-git push origin main develop --tags
-```
-
-#### Hotfix (Critical Production Bug)
-
-```bash
-# Create hotfix branch from main
-git checkout main
-git pull origin main
-git checkout -b hotfix/critical-bug
-
-# Fix the bug...
-git add .
-git commit -m "fix: critical production bug"
-
-# Merge to main and tag
-git checkout main
-git merge --no-ff hotfix/critical-bug
-git tag -a v0.1.1 -m "Hotfix v0.1.1"
-
-# Merge to develop
-git checkout develop
-git merge --no-ff hotfix/critical-bug
-
-# Delete hotfix branch
-git branch -d hotfix/critical-bug
-
-# Push everything
-git push origin main develop --tags
-```
+Small fixes (typos, docs) can go directly to `main`.
 
 ## Commit Message Guidelines
 
@@ -230,12 +154,11 @@ go test ./...
 # Run with coverage
 go test -cover ./...
 
-# Run with race detector
-go test -race ./...
+# Run with race detector (requires CGO)
+CGO_ENABLED=1 go test -race ./...
 
 # Run benchmarks
-go test -bench=. -benchmem ./simd/
-go test -bench=. -benchmem ./prefilter/
+go test -bench=. -benchmem ./...
 ```
 
 ### Running Linter
@@ -246,9 +169,6 @@ golangci-lint run
 
 # Run with verbose output
 golangci-lint run -v
-
-# Verify config
-golangci-lint config verify
 ```
 
 ## Project Structure
@@ -258,32 +178,35 @@ ahocorasick/
 ├── .github/              # GitHub workflows and templates
 │   ├── CODEOWNERS       # Code ownership
 │   └── workflows/       # CI/CD pipelines
-├── ahocorasick.go        # Package entry point
-├── automaton.go          # Search API (Find, IsMatch, FindAll)
-├── builder.go            # Pattern builder
-├── byteclasses.go        # Alphabet compression
-├── match.go              # Match types and semantics
-├── nfa.go                # Trie + failure links
-├── *_test.go             # Tests and benchmarks
+├── ahocorasick.go        # Package doc and version constant
+├── automaton.go          # Search API (Find, FindAt, FindAll, IsMatch, Count)
+├── builder.go            # Builder pattern for configuration
+├── byteclasses.go        # Alphabet compression (256 → N equivalence classes)
+├── dfa.go                # DFA compilation (flat transition table)
+├── match.go              # Match, MatchKind, PatternID, StateID types
+├── nfa.go                # NFA construction (trie + failure links)
+├── *_test.go             # Tests, benchmarks, fuzz tests
 ├── .golangci.yml         # Linter configuration
+├── AGENTS.md             # AI agent documentation
 ├── CHANGELOG.md          # Version history
 ├── CONTRIBUTING.md       # This file
 ├── LICENSE               # MIT License
-└── README.md             # Main documentation
+├── README.md             # Main documentation
+└── llms.txt              # LLM discovery file
 ```
 
 ## Adding New Features
 
 1. Check if issue exists, if not create one
 2. Discuss approach in the issue
-3. Create feature branch from `develop`
+3. Create feature branch from `main`
 4. Implement feature with tests
 5. Update documentation
-6. Run quality checks (`bash scripts/pre-release-check.sh`)
-7. Create pull request to `develop`
-8. Wait for code review
+6. Run quality checks (build, test, lint, format)
+7. Create pull request to `main`
+8. Wait for CI and code review
 9. Address feedback
-10. Merge when approved
+10. Squash merge when approved
 
 ## Code Style Guidelines
 
